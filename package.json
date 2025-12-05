@@ -1,0 +1,41 @@
+{
+  "name": "compinche-file-manager",
+  "version": "1.0.0",
+  "description": "Serverless file management system with presigned URLs, DynamoDB metadata, and Cognito authentication",
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "lint": "eslint backend/lambdas tests --ext .js,.mjs",
+    "lint:fix": "eslint backend/lambdas tests --ext .js,.mjs --fix",
+    "dev:backend": "serverless offline",
+    "deploy": "serverless deploy",
+    "package": "serverless package",
+    "build:go": "cd backend/lambdas-go && GOOS=linux GOARCH=amd64 go build -o bin/bootstrap health/main.go && zip -j bin/health.zip bin/bootstrap"
+  },
+  "keywords": [
+    "aws",
+    "serverless",
+    "lambda",
+    "s3",
+    "dynamodb",
+    "cognito",
+    "presigned-url"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.450.0",
+    "@aws-sdk/client-s3": "^3.450.0",
+    "@aws-sdk/lib-dynamodb": "^3.450.0",
+    "@aws-sdk/s3-request-presigner": "^3.450.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.8",
+    "eslint": "^8.53.0",
+    "jest": "^29.7.0",
+    "serverless": "^3.38.0",
+    "serverless-offline": "^13.3.0"
+  }
+}
