@@ -74,35 +74,18 @@ describe('Audit File Lambda', () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it('should extract userId from cognito:username fallback', async () => {
+    it('should extract userId from Authorization header JWT fallback', async () => {
+      const payload = Buffer.from(JSON.stringify({ sub: mockUserId })).toString('base64');
+      const token = `header.${payload}.signature`;
+
       const event = {
         requestContext: {
-          authorizer: {
-            claims: { 'cognito:username': mockUserId },
-          },
           http: { method: 'GET' },
         },
         httpMethod: 'GET',
-        body: null,
-        queryStringParameters: null,
-      };
-
-      mockSend.mockResolvedValueOnce({ Items: [] });
-
-      const response = await handler(event);
-
-      expect(response.statusCode).toBe(200);
-    });
-
-    it('should extract userId from principalId fallback', async () => {
-      const event = {
-        requestContext: {
-          authorizer: {
-            principalId: mockUserId,
-          },
-          http: { method: 'GET' },
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-        httpMethod: 'GET',
         body: null,
         queryStringParameters: null,
       };
@@ -199,75 +182,38 @@ describe('Audit File Lambda', () => {
     });
   });
 
-  describe('POST - Create Audit Log', () => {
-    it('should return 400 when fileId is missing', async () => {
-      const event = createEvent('POST', { action: 'download' });
+  describe('POST - Query Audit Logs', () => {
+    it('should return audit logs for user using POST body', async () => {
+      const mockAuditLogs = [
+        { userId: mockUserId, timestamp: '2024-01-01T00:00:00.000Z', fileId: mockFileId, action: 'download' },
+        { userId: mockUserId, timestamp: '2024-01-01T01:00:00.000Z', fileId: mockFileId, action: 'view' },
+      ];
+
+      mockSend.mockResolvedValueOnce({ Items: mockAuditLogs });
+
+      const event = createEvent('POST', { limit: 50 });
 
       const response = await handler(event);
       const body = JSON.parse(response.body);
 
-      expect(response.statusCode).toBe(400);
-      expect(body.error).toContain('fileId');
+      expect(response.statusCode).toBe(200);
+      expect(body.auditLogs).toEqual(mockAuditLogs);
+      expect(body.count).toBe(2);
     });
 
-    it('should return 400 when action is missing', async () => {
-      const event = createEvent('POST', { fileId: mockFileId });
+    it('should apply fileId and action filters from POST body', async () => {
+      mockSend.mockResolvedValueOnce({ Items: [] });
 
-      const response = await handler(event);
-      const body = JSON.parse(response.body);
-
-      expect(response.statusCode).toBe(400);
-      expect(body.error).toContain('action');
-    });
-
-    it('should return 400 for invalid action type', async () => {
-      const event = createEvent('POST', { fileId: mockFileId, action: 'invalid_action' });
-
-      const response = await handler(event);
-      const body = JSON.parse(response.body);
-
-      expect(response.statusCode).toBe(400);
-      expect(body.error).toContain('Invalid action');
-    });
-
-    const validActions = ['view', 'download', 'upload', 'delete', 'share', 'access_attempt'];
-
-    it.each(validActions)('should accept valid action: %s', async (action) => {
-      const event = createEvent('POST', { fileId: mockFileId, action });
-
-      const response = await handler(event);
-
-      expect(response.statusCode).toBe(201);
-    });
-
-    it('should create audit log entry successfully', async () => {
-      const event = createEvent('POST', {
-        fileId: mockFileId,
-        action: 'download',
-        metadata: { source: 'web' },
-      });
-
-      const response = await handler(event);
-      const body = JSON.parse(response.body);
-
-      expect(response.statusCode).toBe(201);
-      expect(body.message).toContain('successfully');
-      expect(body.auditEntry.fileId).toBe(mockFileId);
-      expect(body.auditEntry.action).toBe('download');
-    });
-
-    it('should include IP address and user agent in metadata', async () => {
       const event = createEvent('POST', { fileId: mockFileId, action: 'view' });
 
       await handler(event);
 
       expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
-          Item: expect.objectContaining({
-            metadata: expect.objectContaining({
-              ipAddress: '127.0.0.1',
-              userAgent: 'test-agent',
-            }),
+          FilterExpression: '#fileId = :fileId AND #action = :action',
+          ExpressionAttributeValues: expect.objectContaining({
+            ':fileId': mockFileId,
+            ':action': 'view',
           }),
         })
       );
